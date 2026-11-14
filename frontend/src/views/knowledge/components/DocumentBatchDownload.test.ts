@@ -38,6 +38,8 @@ test('Blob 格式的 JSON 错误会还原为可读消息', () => {
 })
 
 test('当前工作空间批量导出复用统一头按钮并接入确认弹窗', () => {
+  assert.match(knowledgeApi, /knowledge-bases\/batch-export\/preflight/)
+  assert.match(knowledgeApi, /preflightWorkspaceExport/)
   assert.match(knowledgeList, /data-testid="kb-list-bulk-export"/)
   assert.match(knowledgeList, /class="header-action-btn"/)
   assert.match(knowledgeList, /@click="openBulkExport"/)
@@ -64,6 +66,11 @@ test('所有支持语言都包含工作空间批量导出文案', () => {
     'noFiles',
     'skipped',
     'close',
+    'pathConflict',
+    'pathConflictTitle',
+    'pathConflictHint',
+    'conflictItem',
+    'conflictsTruncated',
   ]
   for (const localeName of localeNames) {
     const locale = readFileSync(

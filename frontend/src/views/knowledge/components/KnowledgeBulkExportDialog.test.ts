@@ -58,10 +58,38 @@ test('shows the final error without pretending the export succeeded', async t =>
   assert.match(vm.errorText, /storage unavailable/)
 })
 
+test('shows structured file and directory conflicts with retry available', async t => {
+  const { vm } = mountDialog(t, {
+    visible: true,
+    exporting: false,
+    error: 'knowledgeList.bulkExport.pathConflict',
+    conflictDetails: {
+      conflicts: [{
+        reason: 'file_directory_conflict',
+        knowledge_base_id: 'kb-1',
+        knowledge_base_name: '项目资料',
+        conflict_path: 'report.pdf',
+        file_name: 'report.pdf',
+        conflicting_directory_file_name: 'notes.md',
+      }],
+      conflict_count: 1,
+      truncated: false,
+    },
+  })
+  await flush()
+
+  assert.equal(vm.hasPathConflicts, true)
+  assert.equal(vm.conflictItems.length, 1)
+  assert.match(vm.conflictItems[0], /项目资料/)
+  assert.match(vm.conflictItems[0], /report\.pdf/)
+  assert.equal(vm.canClose, true)
+})
+
 test('dialog template exposes start, cancel and progress actions', () => {
   const source = readFileSync(componentURL, 'utf8')
   assert.match(source, /data-testid="bulk-export-start"/)
   assert.match(source, /data-testid="bulk-export-cancel"/)
+  assert.match(source, /data-testid="bulk-export-conflicts"/)
   assert.match(source, /<t-progress/)
   assert.match(source, /:close-on-overlay-click="!exporting"/)
 })
