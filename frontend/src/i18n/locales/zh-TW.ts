@@ -6372,6 +6372,24 @@ export default {
     defaultLocaleBrowser: '跟隨瀏覽器 / 宿主'
   },
   knowledgeList: {
+    bulkExport: {
+      action: '批次匯出來源檔案',
+      title: '批次匯出目前工作空間',
+      description: '將目前工作空間全部知識庫的來源檔案匯出為一個 ZIP，不包含共享知識庫。',
+      scopePrompt: '將匯出目前工作空間的全部知識庫，包括同事建立的知識庫。',
+      structure: 'ZIP 第一層為知識庫名稱，之後保留原有資料夾和檔案名稱；手動文件匯出為 .md。',
+      start: '開始匯出',
+      currentKb: '正在處理：{name}',
+      kbProgress: '已完成 {done}/{total} 個知識庫',
+      docProgress: '已匯出 {count} 個檔案',
+      cancel: '取消匯出',
+      completed: '來源檔案匯出完成',
+      failed: '來源檔案匯出失敗，未產生不完整的壓縮檔',
+      retry: '重新匯出',
+      noFiles: '目前工作空間沒有可匯出的來源檔案',
+      skipped: '已略過 {count} 個沒有來源檔案的項目',
+      close: '關閉'
+    },
     create: '新建知識庫',
     subtitle: '管理和組織您的知識庫，支持文件型和問答型知識庫',
     sharedToOrgs: '已共享給 {count} 個空間',

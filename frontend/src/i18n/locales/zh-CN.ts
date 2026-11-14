@@ -6372,6 +6372,24 @@ export default {
     defaultLocaleBrowser: '跟随浏览器 / 宿主'
   },
   knowledgeList: {
+    bulkExport: {
+      action: '批量导出源文件',
+      title: '批量导出当前工作空间',
+      description: '将当前工作空间全部知识库的源文件导出为一个 ZIP，不包含共享知识库。',
+      scopePrompt: '将导出当前工作空间的全部知识库，包括同事创建的知识库。',
+      structure: 'ZIP 第一级为知识库名称，之后保留原有文件夹和文件名；手动文档导出为 .md。',
+      start: '开始导出',
+      currentKb: '正在处理：{name}',
+      kbProgress: '已完成 {done}/{total} 个知识库',
+      docProgress: '已导出 {count} 个文件',
+      cancel: '取消导出',
+      completed: '源文件导出完成',
+      failed: '源文件导出失败，未生成残缺压缩包',
+      retry: '重新导出',
+      noFiles: '当前工作空间没有可导出的源文件',
+      skipped: '已跳过 {count} 个无源文件条目',
+      close: '关闭'
+    },
     create: '新建知识库',
     subtitle: '管理和组织您的知识库，支持文档型和问答型知识库',
     sharedToOrgs: '已共享给 {count} 个空间',

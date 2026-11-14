@@ -153,6 +153,25 @@ test('splits an oversized batch before writing the outer archive', async () => {
   assert.ok(zip.file('A/large-b.txt'))
 })
 
+test('keeps duplicate filenames from separate batches instead of overwriting them', async () => {
+  const result = await exportWorkspaceKnowledgeBases(
+    [{ id: 'kb-a', name: 'A' }],
+    createDeps({
+      filesByKb: {
+        'kb-a': [
+          { id: 'first', type: 'file', file_path: 'first', file_size: 512 * 1024 * 1024 },
+          { id: 'second', type: 'file', file_path: 'second', file_size: 1 },
+        ],
+      },
+      batch: async (_kbId, ids) => createZip({ 'docs/report.txt': ids[0] }),
+    }),
+  )
+
+  const zip = await loadZip(result.blob)
+  assert.equal(await zip.file('A/docs/report.txt')?.async('string'), 'first')
+  assert.equal(await zip.file('A/docs/report (2).txt')?.async('string'), 'second')
+})
+
 test('falls back to a single authenticated download for a file over the batch limit', async () => {
   const singles: string[] = []
   const result = await exportWorkspaceKnowledgeBases(

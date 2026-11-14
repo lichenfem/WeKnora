@@ -3495,6 +3495,24 @@ export default {
     }
   },
   knowledgeList: {
+    bulkExport: {
+      action: 'Export source files',
+      title: 'Export current workspace',
+      description: 'Export source files from every knowledge base in the current workspace as one ZIP. Shared knowledge bases are excluded.',
+      scopePrompt: 'This exports every knowledge base in the current workspace, including knowledge bases created by teammates.',
+      structure: 'The first ZIP level is the knowledge base name. Existing folders and filenames are preserved; manual documents are exported as .md files.',
+      start: 'Start export',
+      currentKb: 'Processing: {name}',
+      kbProgress: 'Completed {done}/{total} knowledge bases',
+      docProgress: 'Exported {count} files',
+      cancel: 'Cancel export',
+      completed: 'Source file export completed',
+      failed: 'Source file export failed. No incomplete archive was generated.',
+      retry: 'Export again',
+      noFiles: 'The current workspace has no source files to export',
+      skipped: 'Skipped {count} entries without source files',
+      close: 'Close'
+    },
     create: 'Create Knowledge Base',
     subtitle: 'Manage and organize your knowledge bases, supporting document-based and FAQ-based knowledge bases',
     sharedToOrgs: 'Shared to {count} space(s)',

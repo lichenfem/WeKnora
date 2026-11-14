@@ -115,6 +115,28 @@ function joinArchivePath(...parts: string[]): string {
   return parts.filter(Boolean).join('/')
 }
 
+function uniqueArchiveFilePath(filePath: string, usedPaths: Set<string>): string {
+  if (!usedPaths.has(filePath.toLocaleLowerCase())) {
+    usedPaths.add(filePath.toLocaleLowerCase())
+    return filePath
+  }
+
+  const slash = filePath.lastIndexOf('/')
+  const directory = slash >= 0 ? filePath.slice(0, slash + 1) : ''
+  const filename = slash >= 0 ? filePath.slice(slash + 1) : filePath
+  const dot = filename.lastIndexOf('.')
+  const extension = dot > 0 ? filename.slice(dot) : ''
+  const stem = dot > 0 ? filename.slice(0, dot) : filename
+
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${directory}${stem} (${suffix})${extension}`
+    if (!usedPaths.has(candidate.toLocaleLowerCase())) {
+      usedPaths.add(candidate.toLocaleLowerCase())
+      return candidate
+    }
+  }
+}
+
 function makeBatches(items: KnowledgeFileItem[]): KnowledgeFileItem[][] {
   const batches: KnowledgeFileItem[][] = []
   let current: KnowledgeFileItem[] = []
@@ -147,6 +169,7 @@ async function copyInnerArchive(
   target: JSZip,
   innerBlob: Blob,
   prefix: string,
+  usedPaths: Set<string>,
 ): Promise<number> {
   const inner = await JSZip.loadAsync(new Uint8Array(await innerBlob.arrayBuffer()))
   let copied = 0
@@ -155,7 +178,10 @@ async function copyInnerArchive(
     const archivePath = sanitizeInnerArchivePath(entry.name)
     if (!archivePath) continue
     const data = await entry.async('uint8array')
-    target.file(joinArchivePath(prefix, archivePath), data)
+    target.file(
+      uniqueArchiveFilePath(joinArchivePath(prefix, archivePath), usedPaths),
+      data,
+    )
     copied += 1
   }
   return copied
@@ -198,6 +224,7 @@ export async function exportWorkspaceKnowledgeBases(
     if (sourceItems.length === 0) continue
 
     const folder = uniqueKnowledgeBaseFolderName(kb.name, kb.id, usedFolderNames)
+    const usedPaths = new Set<string>()
 
     const addBatch = async (items: KnowledgeFileItem[]): Promise<void> => {
       throwIfAborted(options.signal)
@@ -208,7 +235,7 @@ export async function exportWorkspaceKnowledgeBases(
           options.signal,
         )
         throwIfAborted(options.signal)
-        exportedDocs += await copyInnerArchive(outer, innerBlob, folder)
+        exportedDocs += await copyInnerArchive(outer, innerBlob, folder, usedPaths)
       } catch (error) {
         if (!isBatchSizeError(error)) throw error
         if (items.length > 1) {
@@ -227,7 +254,10 @@ export async function exportWorkspaceKnowledgeBases(
         )
         const folderPath = sanitizeInnerArchivePath(item.folder_path ?? '')
         const fileBytes = new Uint8Array(await fileBlob.arrayBuffer())
-        outer.file(joinArchivePath(folder, folderPath, filename), fileBytes)
+        outer.file(
+          uniqueArchiveFilePath(joinArchivePath(folder, folderPath, filename), usedPaths),
+          fileBytes,
+        )
         exportedDocs += 1
       }
     }

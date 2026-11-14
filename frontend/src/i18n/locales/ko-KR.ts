@@ -6371,6 +6371,24 @@ export default {
     defaultLocaleBrowser: '브라우저 / 호스트 기본값'
   },
   knowledgeList: {
+    bulkExport: {
+      action: '소스 파일 일괄 내보내기',
+      title: '현재 워크스페이스 일괄 내보내기',
+      description: '현재 워크스페이스의 모든 지식베이스 소스 파일을 하나의 ZIP으로 내보냅니다. 공유 지식베이스는 제외됩니다.',
+      scopePrompt: '동료가 만든 지식베이스를 포함하여 현재 워크스페이스의 모든 지식베이스를 내보냅니다.',
+      structure: 'ZIP의 첫 번째 단계는 지식베이스 이름입니다. 기존 폴더와 파일 이름을 유지하며 수동 문서는 .md로 내보냅니다.',
+      start: '내보내기 시작',
+      currentKb: '처리 중: {name}',
+      kbProgress: '지식베이스 {done}/{total}개 완료',
+      docProgress: '파일 {count}개 내보냄',
+      cancel: '내보내기 취소',
+      completed: '소스 파일 내보내기가 완료되었습니다',
+      failed: '소스 파일 내보내기에 실패했습니다. 불완전한 압축 파일은 생성되지 않았습니다.',
+      retry: '다시 내보내기',
+      noFiles: '현재 워크스페이스에 내보낼 소스 파일이 없습니다',
+      skipped: '소스 파일이 없는 항목 {count}개를 건너뛰었습니다',
+      close: '닫기'
+    },
     create: '지식베이스 생성',
     subtitle: '지식베이스를 관리하고 구성합니다. 문서형과 Q&A형 지식베이스를 지원합니다',
     sharedToOrgs: '{count} 스페이스에 공유됨',

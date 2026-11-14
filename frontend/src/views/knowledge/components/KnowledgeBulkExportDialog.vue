@@ -81,8 +81,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ExportProgress } from '../knowledgeBulkExport'
 
+const { t } = useI18n()
 const props = defineProps<{
   visible: boolean
   exporting: boolean
@@ -109,7 +111,7 @@ const progressPercent = computed(() => {
 })
 const currentKbLabel = computed(() => {
   const name = props.progress?.currentKbName ?? ''
-  return name ? `正在处理：${name}` : ''
+  return name ? t('knowledgeList.bulkExport.currentKb', { name }) : ''
 })
 
 function emitStart(): void {

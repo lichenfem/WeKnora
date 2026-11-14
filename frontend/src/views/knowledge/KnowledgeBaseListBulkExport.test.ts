@@ -122,8 +122,15 @@ test('bulk export refreshes every current-workspace KB and excludes shared KBs',
   const fetchArgs = fetchKnowledgeBasesForList.mock.calls.at(-1)?.arguments as any[]
   assert.equal(fetchArgs[0].creator, 'all')
   assert.equal(fetchArgs[1], true)
-  const exportCalls = exportWorkspaceKnowledgeBases.mock.calls as unknown as any[][]
-  const exportedKbs = exportCalls[0]?.[0] as Array<{ id: string }>
+  assert.equal(
+    exportWorkspaceKnowledgeBases.mock.callCount(),
+    1,
+    JSON.stringify(errorMessage.mock.calls),
+  )
+  const exportCall = exportWorkspaceKnowledgeBases.mock.calls[0] as unknown as {
+    arguments: [Array<{ id: string }>, unknown, unknown]
+  }
+  const exportedKbs = exportCall.arguments[0]
   assert.deepEqual(exportedKbs.map(kb => kb.id), ['kb-own'])
   assert.equal(errorMessage.mock.callCount(), 1)
 })
