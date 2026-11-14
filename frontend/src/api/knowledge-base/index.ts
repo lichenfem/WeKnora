@@ -650,8 +650,8 @@ export function batchDeleteKnowledge(kbId: string, ids: string[]) {
   return post(`/api/v1/knowledge/batch-delete`, { kb_id: kbId, ids });
 }
 
-export function downKnowledgeDetails(id: string) {
-  return getDown(`/api/v1/knowledge/${id}/download`);
+export function downKnowledgeDetails(id: string, signal?: AbortSignal) {
+  return getDown(`/api/v1/knowledge/${encodeURIComponent(id)}/download`, { signal });
 }
 
 // 使用已有登录和租户请求头下载 ZIP，不将凭据放入下载链接。
