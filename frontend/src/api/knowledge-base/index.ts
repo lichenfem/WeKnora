@@ -654,6 +654,42 @@ export function downKnowledgeDetails(id: string, signal?: AbortSignal) {
   return getDown(`/api/v1/knowledge/${encodeURIComponent(id)}/download`, { signal });
 }
 
+export interface WorkspaceExportPreflightConflict {
+  reason: string;
+  knowledge_base_id?: string;
+  knowledge_base_name?: string;
+  file_knowledge_id?: string;
+  file_name?: string;
+  folder_path?: string;
+  conflict_path?: string;
+  conflicting_directory_knowledge_id?: string;
+  conflicting_directory_file_name?: string;
+  conflicting_directory_folder_path?: string;
+}
+
+export interface WorkspaceExportConflictDetails {
+  conflicts: WorkspaceExportPreflightConflict[];
+  conflict_count: number;
+  truncated: boolean;
+}
+
+export interface WorkspaceExportPreflightResult {
+  knowledge_base_count: number;
+  file_count: number;
+  conflict_count: number;
+}
+
+export async function preflightWorkspaceExport(
+  signal?: AbortSignal,
+): Promise<WorkspaceExportPreflightResult> {
+  const response = await post<{ success: boolean; data: WorkspaceExportPreflightResult }>(
+    '/api/v1/knowledge-bases/batch-export/preflight',
+    {},
+    { signal, timeout: 300000 },
+  );
+  return response.data;
+}
+
 // 使用已有登录和租户请求头下载 ZIP，不将凭据放入下载链接。
 export function batchDownloadKnowledge(kbId: string, ids: string[], signal?: AbortSignal): Promise<Blob> {
   return post<Blob>(`/api/v1/knowledge-bases/${encodeURIComponent(kbId)}/knowledge/batch-download`, { ids }, {

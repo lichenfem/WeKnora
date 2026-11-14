@@ -717,6 +717,7 @@
     <ContextualGuide tour="kbList" :when="showKbListContextualGuide" />
     <KnowledgeBulkExportDialog v-model:visible="bulkExportVisible"
       :exporting="bulkExporting" :progress="bulkExportProgress" :error="bulkExportError"
+      :conflict-details="bulkExportConflictDetails"
       @start="handleBulkExport" @cancel="cancelBulkExport" />
   </div>
 </template>
@@ -735,7 +736,9 @@ import {
   downKnowledgeDetails,
   duplicateKnowledgeBase,
   listKnowledgeFiles,
+  preflightWorkspaceExport,
   togglePinKnowledgeBase,
+  type WorkspaceExportConflictDetails,
 } from '@/api/knowledge-base'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { formatStringDate } from '@/utils/index'
@@ -787,6 +790,7 @@ const bulkExportVisible = ref(false)
 const bulkExporting = ref(false)
 const bulkExportProgress = ref<ExportProgress>()
 const bulkExportError = ref('')
+const bulkExportConflictDetails = ref<WorkspaceExportConflictDetails>()
 let bulkExportController: AbortController | undefined
 
 // 左侧空间选择：默认根据当前角色决定。
@@ -1558,6 +1562,7 @@ const openBulkExport = () => {
   if (bulkExporting.value) return
   bulkExportProgress.value = undefined
   bulkExportError.value = ''
+  bulkExportConflictDetails.value = undefined
   bulkExportVisible.value = true
 }
 
@@ -1585,9 +1590,12 @@ const handleBulkExport = async () => {
   bulkExportController = controller
   bulkExporting.value = true
   bulkExportError.value = ''
+  bulkExportConflictDetails.value = undefined
   bulkExportProgress.value = undefined
 
   try {
+    await preflightWorkspaceExport(controller.signal)
+    if (controller.signal.aborted) return
     const knowledgeBases = await chatResources.fetchKnowledgeBasesForList({ creator: 'all' }, true)
     const deps: WorkspaceBulkExportDeps = {
       listFiles: async (kbId, params, options) => (
@@ -1612,9 +1620,17 @@ const handleBulkExport = async () => {
     bulkExportVisible.value = false
   } catch (error: any) {
     if (controller.signal.aborted) return
-    if (error instanceof WorkspaceBulkExportError && error.code === 'NO_EXPORTABLE_FILES') {
+    const conflictDetails = error?.error?.details as WorkspaceExportConflictDetails | undefined
+    if (error?.status === 409 || conflictDetails?.conflicts) {
+      bulkExportConflictDetails.value = conflictDetails
+      bulkExportError.value = t('knowledgeList.bulkExport.pathConflict')
+      MessagePlugin.error(bulkExportError.value)
+    } else if (error instanceof WorkspaceBulkExportError && error.code === 'NO_EXPORTABLE_FILES') {
       bulkExportError.value = t('knowledgeList.bulkExport.noFiles')
       MessagePlugin.warning(bulkExportError.value)
+    } else if (error instanceof WorkspaceBulkExportError && error.code === 'PATH_CONFLICT') {
+      bulkExportError.value = t('knowledgeList.bulkExport.pathConflict')
+      MessagePlugin.error(bulkExportError.value)
     } else {
       bulkExportError.value = error?.message || t('knowledgeList.bulkExport.failed')
       MessagePlugin.error(bulkExportError.value)

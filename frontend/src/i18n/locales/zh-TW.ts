@@ -6388,6 +6388,11 @@ export default {
       retry: '重新匯出',
       noFiles: '目前工作空間沒有可匯出的來源檔案',
       skipped: '已略過 {count} 個沒有來源檔案的項目',
+      pathConflict: '偵測到檔案與資料夾路徑衝突，請修改名稱後重試',
+      pathConflictTitle: '匯出路徑衝突',
+      pathConflictHint: '以下路徑同時被用作檔案和資料夾，請調整知識庫中的名稱或目錄後重試。',
+      conflictItem: '知識庫「{kb}」中的「{path}」同時是檔案和資料夾；{file} 與目錄中的 {directory} 衝突',
+      conflictsTruncated: '僅顯示部分衝突（共 {count} 個），修正後重試會繼續檢查其餘路徑。',
       close: '關閉'
     },
     create: '新建知識庫',

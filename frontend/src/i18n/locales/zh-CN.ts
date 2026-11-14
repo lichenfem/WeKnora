@@ -6388,6 +6388,11 @@ export default {
       retry: '重新导出',
       noFiles: '当前工作空间没有可导出的源文件',
       skipped: '已跳过 {count} 个无源文件条目',
+      pathConflict: '检测到文件与文件夹路径冲突，请修改名称后重试',
+      pathConflictTitle: '导出路径冲突',
+      pathConflictHint: '以下路径同时被用作文件和文件夹，请调整知识库中的名称或目录后重试。',
+      conflictItem: '知识库“{kb}”中的“{path}”同时是文件和文件夹；{file} 与目录中的 {directory} 冲突',
+      conflictsTruncated: '仅显示部分冲突（共 {count} 个），修正后重试会继续检查其余路径。',
       close: '关闭'
     },
     create: '新建知识库',

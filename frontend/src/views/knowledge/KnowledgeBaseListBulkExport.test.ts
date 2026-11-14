@@ -181,6 +181,7 @@ test('bulk export refreshes every current-workspace KB and excludes shared KBs',
   vm.openBulkExport()
   assert.equal(vm.bulkExportVisible, true)
 
+  calls.length = 0
   await vm.handleBulkExport()
   const fetchArgs = fetchKnowledgeBasesForList.mock.calls.at(-1)?.arguments as any[]
   assert.equal(fetchArgs[0].creator, 'all')
@@ -214,7 +215,7 @@ test('stops before fetching or downloading when preflight reports path conflicts
   }
   const {
     vm,
-    fetchKnowledgeBasesForList,
+    calls,
     exportWorkspaceKnowledgeBases,
     listKnowledgeFiles,
     batchDownloadKnowledge,
@@ -234,9 +235,10 @@ test('stops before fetching or downloading when preflight reports path conflicts
   await flush()
   await flush()
 
+  calls.length = 0
   await vm.handleBulkExport()
 
-  assert.equal(fetchKnowledgeBasesForList.mock.callCount(), 0)
+  assert.equal(calls.includes('fetch'), false)
   assert.equal(exportWorkspaceKnowledgeBases.mock.callCount(), 0)
   assert.equal(listKnowledgeFiles.mock.callCount(), 0)
   assert.equal(batchDownloadKnowledge.mock.callCount(), 0)

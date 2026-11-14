@@ -29,6 +29,18 @@
         <div>
           <strong>{{ $t('knowledgeList.bulkExport.failed') }}</strong>
           <p>{{ errorText }}</p>
+          <div v-if="hasPathConflicts" class="bulk-export-conflicts">
+            <strong>{{ $t('knowledgeList.bulkExport.pathConflictTitle') }}</strong>
+            <p>{{ $t('knowledgeList.bulkExport.pathConflictHint') }}</p>
+            <ul data-testid="bulk-export-conflicts">
+              <li v-for="item in conflictItems" :key="item">{{ item }}</li>
+            </ul>
+            <p v-if="conflictDetails?.truncated" class="bulk-export-note">
+              {{ $t('knowledgeList.bulkExport.conflictsTruncated', {
+                count: conflictDetails.conflict_count,
+              }) }}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -82,6 +94,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { WorkspaceExportConflictDetails } from '@/api/knowledge-base'
 import type { ExportProgress } from '../knowledgeBulkExport'
 
 const { t } = useI18n()
@@ -90,6 +103,7 @@ const props = defineProps<{
   exporting: boolean
   progress?: ExportProgress
   error?: string
+  conflictDetails?: WorkspaceExportConflictDetails
 }>()
 
 const emit = defineEmits<{
@@ -102,6 +116,15 @@ const hasError = computed(() => Boolean(props.error))
 const isConfirming = computed(() => !props.exporting && !hasError.value)
 const canClose = computed(() => !props.exporting)
 const errorText = computed(() => props.error ?? '')
+const hasPathConflicts = computed(() => Boolean(props.conflictDetails?.conflicts.length))
+const conflictItems = computed(() => (
+  props.conflictDetails?.conflicts.map(conflict => t('knowledgeList.bulkExport.conflictItem', {
+    kb: conflict.knowledge_base_name || conflict.knowledge_base_id || '',
+    path: conflict.conflict_path || conflict.file_name || '',
+    file: conflict.file_name || '',
+    directory: conflict.conflicting_directory_file_name || '',
+  })) ?? []
+))
 const progressPercent = computed(() => {
   if (!props.progress || props.progress.totalKbs <= 0) return 0
   const percentage = Math.floor(
@@ -200,6 +223,25 @@ function handleClose(): void {
 
 .bulk-export-error > .t-icon {
   flex-shrink: 0;
+}
+
+.bulk-export-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  color: var(--td-text-color-primary);
+  background: var(--td-warning-color-light);
+  border-radius: var(--app-radius-sm);
+}
+
+.bulk-export-conflicts ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-sm);
+  line-height: 1.55;
 }
 
 .bulk-export-footer {

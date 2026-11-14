@@ -6387,6 +6387,11 @@ export default {
       retry: '다시 내보내기',
       noFiles: '현재 워크스페이스에 내보낼 소스 파일이 없습니다',
       skipped: '소스 파일이 없는 항목 {count}개를 건너뛰었습니다',
+      pathConflict: '파일과 폴더 경로가 충돌합니다. 이름을 변경한 후 다시 시도하세요.',
+      pathConflictTitle: '내보내기 경로 충돌',
+      pathConflictHint: '다음 경로가 파일과 폴더로 동시에 사용되고 있습니다. 지식베이스의 이름이나 폴더를 변경한 후 다시 시도하세요.',
+      conflictItem: '지식베이스 "{kb}"의 "{path}"이(가) 파일과 폴더로 동시에 사용됩니다. {file}과(와) 폴더 안의 {directory}이(가) 충돌합니다.',
+      conflictsTruncated: '충돌 {count}개 중 일부만 표시합니다. 수정 후 다시 시도하면 나머지 경로를 계속 확인합니다.',
       close: '닫기'
     },
     create: '지식베이스 생성',

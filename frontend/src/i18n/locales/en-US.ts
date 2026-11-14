@@ -3511,6 +3511,11 @@ export default {
       retry: 'Export again',
       noFiles: 'The current workspace has no source files to export',
       skipped: 'Skipped {count} entries without source files',
+      pathConflict: 'A file and folder path conflict was detected. Rename the affected items and try again.',
+      pathConflictTitle: 'Export path conflict',
+      pathConflictHint: 'These paths are used as both a file and a folder. Rename or move them in the knowledge base, then try again.',
+      conflictItem: 'In "{kb}", "{path}" is both a file and a folder; {file} conflicts with {directory} in that folder.',
+      conflictsTruncated: 'Only some of {count} conflicts are shown. Retry after fixing these to check the remaining paths.',
       close: 'Close'
     },
     create: 'Create Knowledge Base',
