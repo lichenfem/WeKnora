@@ -2,6 +2,8 @@ package service
 
 import (
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/types"
 )
 
 // TestSanitizeManualDownloadFilename covers the filename-sanitization logic used
@@ -89,6 +91,32 @@ func TestSanitizeManualDownloadFilename(t *testing.T) {
 			got := sanitizeManualDownloadFilename(tt.title)
 			if got != tt.want {
 				t.Errorf("sanitizeManualDownloadFilename(%q) = %q, want %q", tt.title, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveKnowledgeDownloadFilenamePreservesSourceNames(t *testing.T) {
+	tests := []struct {
+		name      string
+		knowledge *types.Knowledge
+		want      string
+	}{
+		{
+			name:      "uploaded filename keeps leading and trailing underscores",
+			knowledge: &types.Knowledge{Type: "file", FileName: "_draft_.pdf"},
+			want:      "_draft_.pdf",
+		},
+		{
+			name:      "manual title keeps leading and trailing underscores",
+			knowledge: &types.Knowledge{Type: types.KnowledgeTypeManual, Title: "_会议记录_"},
+			want:      "_会议记录_.md",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ResolveKnowledgeDownloadFilename(tt.knowledge); got != tt.want {
+				t.Fatalf("ResolveKnowledgeDownloadFilename() = %q, want %q", got, tt.want)
 			}
 		})
 	}

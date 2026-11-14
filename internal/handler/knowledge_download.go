@@ -9,21 +9,25 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/filetransport"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
 	maxBatchDownloadFiles             = 200
 	maxBatchDownloadBytes       int64 = 512 * 1024 * 1024
 	maxConcurrentBatchDownloads       = 4
+	maxWorkspaceExportConflicts       = 20
 )
 
 var batchDownloadSlots = make(chan struct{}, maxConcurrentBatchDownloads)
@@ -36,6 +40,191 @@ type BatchDownloadKnowledgeRequest struct {
 type knowledgeDownloadEntry struct {
 	ID         string
 	FolderPath string
+}
+
+// WorkspaceExportPreflightConflict describes an exported file that would have
+// to be both a file and a directory at the same path in one knowledge base.
+type WorkspaceExportPreflightConflict struct {
+	Reason                          string `json:"reason"`
+	KnowledgeBaseID                 string `json:"knowledge_base_id"`
+	KnowledgeBaseName               string `json:"knowledge_base_name"`
+	FileKnowledgeID                 string `json:"file_knowledge_id"`
+	FileName                        string `json:"file_name"`
+	FolderPath                      string `json:"folder_path"`
+	ConflictPath                    string `json:"conflict_path"`
+	ConflictingDirectoryKnowledgeID string `json:"conflicting_directory_knowledge_id"`
+	ConflictingDirectoryFileName    string `json:"conflicting_directory_file_name"`
+	ConflictingDirectoryFolderPath  string `json:"conflicting_directory_folder_path"`
+}
+
+type workspaceExportPathEntry struct {
+	knowledge *types.Knowledge
+	fileName  string
+	fullPath  string
+}
+
+// PreflightWorkspaceExport validates every source file in the caller's current
+// workspace before the browser starts downloading and zipping files. It is
+// read-only and does not create an archive.
+// @Summary 预检当前工作空间批量导出
+// @Description 检查当前工作空间内将被导出的源文件是否会形成文件/文件夹同名冲突。只检查当前工作空间，不包含跨工作空间共享知识库和 FAQ 知识库。
+// @Tags 知识管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} handler.SuccessResponse
+// @Failure 401 {object} errors.AppError
+// @Failure 403 {object} errors.AppError
+// @Failure 409 {object} errors.AppError
+// @Failure 500 {object} errors.AppError
+// @Security Bearer
+// @Security ApiKeyAuth
+// @Router /knowledge-bases/batch-export/preflight [post]
+func (h *KnowledgeHandler) PreflightWorkspaceExport(c *gin.Context) {
+	caller := types.CallerFromContext(c.Request.Context())
+	ctx := types.WithExecutionTenant(c.Request.Context(), caller.TenantID)
+	kbs, err := h.kbService.ListKnowledgeBases(ctx)
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{"tenant_id": caller.TenantID})
+		_ = c.Error(errors.NewInternalServerError("无法读取当前工作空间的知识库，请稍后重试"))
+		return
+	}
+
+	conflicts := make([]WorkspaceExportPreflightConflict, 0)
+	conflictCount := 0
+	fileCount := 0
+	knowledgeBaseCount := 0
+	for _, kb := range kbs {
+		if kb == nil || kb.TenantID != caller.TenantID || kb.Type == types.KnowledgeBaseTypeFAQ {
+			continue
+		}
+		knowledgeBaseCount++
+		items, err := h.kgService.ListKnowledgeByKnowledgeBaseID(ctx, kb.ID)
+		if err != nil {
+			logger.ErrorWithFields(ctx, err, map[string]interface{}{
+				"tenant_id":         caller.TenantID,
+				"knowledge_base_id": kb.ID,
+			})
+			_ = c.Error(errors.NewInternalServerError("无法读取知识库文档，请稍后重试"))
+			return
+		}
+
+		files, directories := collectWorkspaceExportPaths(kb, items)
+		fileCount += len(files)
+		for _, conflict := range findWorkspaceExportConflicts(kb, files, directories) {
+			conflictCount++
+			if len(conflicts) < maxWorkspaceExportConflicts {
+				conflicts = append(conflicts, conflict)
+			}
+		}
+	}
+
+	if conflictCount > 0 {
+		_ = c.Error(errors.NewConflictError("检测到文件与文件夹路径冲突，请修改名称后重试").WithDetails(gin.H{
+			"conflicts":      conflicts,
+			"conflict_count": conflictCount,
+			"truncated":      conflictCount > len(conflicts),
+		}))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"knowledge_base_count": knowledgeBaseCount,
+			"file_count":           fileCount,
+			"conflict_count":       0,
+		},
+	})
+}
+
+func collectWorkspaceExportPaths(
+	kb *types.KnowledgeBase,
+	items []*types.Knowledge,
+) (map[string]workspaceExportPathEntry, map[string]workspaceExportPathEntry) {
+	files := make(map[string]workspaceExportPathEntry)
+	directories := make(map[string]workspaceExportPathEntry)
+	for _, item := range items {
+		if !isWorkspaceExportSource(kb, item) {
+			continue
+		}
+		filename := service.ResolveKnowledgeDownloadFilename(item)
+		safeName := sanitizeDownloadFileName(filename)
+		folderPath := sanitizeDownloadFolderPath(item.FolderPath)
+		fullPath := safeName
+		if folderPath != "" {
+			fullPath = folderPath + "/" + safeName
+		}
+		entry := workspaceExportPathEntry{
+			knowledge: item,
+			fileName:  filename,
+			fullPath:  fullPath,
+		}
+		files[normalizeWorkspaceExportPath(fullPath)] = entry
+		for directory := folderPath; directory != ""; directory = path.Dir(directory) {
+			key := normalizeWorkspaceExportPath(directory)
+			if _, exists := directories[key]; !exists {
+				directories[key] = entry
+			}
+			if path.Dir(directory) == directory {
+				break
+			}
+		}
+	}
+	return files, directories
+}
+
+func isWorkspaceExportSource(kb *types.KnowledgeBase, item *types.Knowledge) bool {
+	if item == nil || item.KnowledgeBaseID != kb.ID || item.TenantID != kb.TenantID {
+		return false
+	}
+	if item.Type == types.KnowledgeTypeFAQ {
+		return false
+	}
+	return item.IsManual() || item.FilePath != ""
+}
+
+func findWorkspaceExportConflicts(
+	kb *types.KnowledgeBase,
+	files map[string]workspaceExportPathEntry,
+	directories map[string]workspaceExportPathEntry,
+) []WorkspaceExportPreflightConflict {
+	filePaths := make([]string, 0, len(files))
+	for filePath := range files {
+		filePaths = append(filePaths, filePath)
+	}
+	sort.Strings(filePaths)
+
+	conflicts := make([]WorkspaceExportPreflightConflict, 0)
+	for _, filePath := range filePaths {
+		fileEntry := files[filePath]
+		for ancestor := path.Dir(fileEntry.fullPath); ancestor != "." && ancestor != "/"; ancestor = path.Dir(ancestor) {
+			ancestorKey := normalizeWorkspaceExportPath(ancestor)
+			ancestorFile, hasFile := files[ancestorKey]
+			directoryEntry, hasDirectory := directories[ancestorKey]
+			if hasFile && hasDirectory {
+				conflicts = append(conflicts, WorkspaceExportPreflightConflict{
+					Reason:                          "file_directory_conflict",
+					KnowledgeBaseID:                 kb.ID,
+					KnowledgeBaseName:               kb.Name,
+					FileKnowledgeID:                 ancestorFile.knowledge.ID,
+					FileName:                        ancestorFile.fileName,
+					FolderPath:                      ancestorFile.knowledge.FolderPath,
+					ConflictPath:                    ancestor,
+					ConflictingDirectoryKnowledgeID: directoryEntry.knowledge.ID,
+					ConflictingDirectoryFileName:    directoryEntry.fileName,
+					ConflictingDirectoryFolderPath:  directoryEntry.knowledge.FolderPath,
+				})
+			}
+			if path.Dir(ancestor) == ancestor {
+				break
+			}
+		}
+	}
+	return conflicts
+}
+
+func normalizeWorkspaceExportPath(value string) string {
+	return strings.ToLower(norm.NFC.String(strings.ReplaceAll(value, "\\", "/")))
 }
 
 // BatchDownloadKnowledge godoc

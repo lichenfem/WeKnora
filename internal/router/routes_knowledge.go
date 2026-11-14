@@ -65,6 +65,9 @@ func RegisterChunkRoutes(r *gin.RouterGroup, handler *handler.ChunkHandler, g *r
 // Body-scoped batch operations have a Contributor route gate and resolve
 // their KB ownership plus Editor operation grant inside the handler.
 func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandler, g *rbacGuards) {
+	workspaceExport := g.apiKeyGroup(r.Group("/knowledge-bases"), apiKeyFullAccess())
+	workspaceExport.POST("/batch-export/preflight", g.Contributor(), handler.PreflightWorkspaceExport)
+
 	// 知识库下的知识路由组（URL :id is the KB id）。Scoped API key 需要
 	// ingest 能力才能写内容，且仍受 KB 范围限制；清空 KB 只允许 full-access key。
 	kb := g.apiKeyGroup(r.Group("/knowledge-bases/:id/knowledge"), apiKeyIngest(apiKeyFullAccess()))

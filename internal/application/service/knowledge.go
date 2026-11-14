@@ -823,7 +823,7 @@ func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.
 		if meta != nil {
 			content = meta.Content
 		}
-		filename := sanitizeManualDownloadFilename(knowledge.Title)
+		filename := ResolveKnowledgeDownloadFilename(knowledge)
 		return io.NopCloser(strings.NewReader(content)), filename, nil
 	}
 
@@ -835,6 +835,20 @@ func (s *knowledgeService) GetKnowledgeFile(ctx context.Context, id string) (io.
 	}
 
 	return file, knowledge.FileName, nil
+}
+
+// ResolveKnowledgeDownloadFilename returns the source filename used by both
+// single-file downloads and workspace export preflight. Manual knowledge is
+// exposed as Markdown, while uploaded files retain everything after the
+// server-side path split, including legal leading and trailing underscores.
+func ResolveKnowledgeDownloadFilename(knowledge *types.Knowledge) string {
+	if knowledge == nil {
+		return ""
+	}
+	if knowledge.IsManual() {
+		return sanitizeManualDownloadFilename(knowledge.Title)
+	}
+	return knowledge.FileName
 }
 
 func (s *knowledgeService) UpdateKnowledge(ctx context.Context, knowledge *types.Knowledge) error {
