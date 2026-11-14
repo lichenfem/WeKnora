@@ -55,7 +55,7 @@ export interface WorkspaceBulkExportDeps {
 
 export class WorkspaceBulkExportError extends Error {
   constructor(
-    public readonly code: 'NO_EXPORTABLE_FILES',
+    public readonly code: 'NO_EXPORTABLE_FILES' | 'PATH_CONFLICT',
     message: string,
   ) {
     super(message)
@@ -107,7 +107,6 @@ function sanitizeInnerArchivePath(raw: string): string {
     .replace(/\\/g, '/')
     .split('/')
     .filter(segment => segment && segment !== '.' && segment !== '..')
-    .map(segment => sanitizeZipSegment(segment, 'document'))
     .join('/')
 }
 
@@ -115,9 +114,47 @@ function joinArchivePath(...parts: string[]): string {
   return parts.filter(Boolean).join('/')
 }
 
-function uniqueArchiveFilePath(filePath: string, usedPaths: Set<string>): string {
-  if (!usedPaths.has(filePath.toLocaleLowerCase())) {
-    usedPaths.add(filePath.toLocaleLowerCase())
+interface ArchivePathRegistry {
+  files: Set<string>
+  directories: Set<string>
+}
+
+function normalizeArchivePath(filePath: string): string {
+  return filePath.normalize('NFC').toLocaleLowerCase()
+}
+
+function parentArchivePaths(filePath: string): string[] {
+  const parents: string[] = []
+  let current = filePath
+  for (let slash = current.lastIndexOf('/'); slash >= 0; slash = current.lastIndexOf('/')) {
+    current = current.slice(0, slash)
+    if (!current) break
+    parents.push(current)
+  }
+  return parents
+}
+
+function pathConflict(filePath: string): WorkspaceBulkExportError {
+  return new WorkspaceBulkExportError(
+    'PATH_CONFLICT',
+    `The export path conflicts with an existing file or directory: ${filePath}`,
+  )
+}
+
+function registerArchiveFilePath(filePath: string, registry: ArchivePathRegistry): string {
+  const normalizedPath = normalizeArchivePath(filePath)
+  if (
+    registry.directories.has(normalizedPath)
+    || parentArchivePaths(normalizedPath).some(parent => registry.files.has(parent))
+  ) {
+    throw pathConflict(filePath)
+  }
+
+  if (!registry.files.has(normalizedPath)) {
+    registry.files.add(normalizedPath)
+    for (const parent of parentArchivePaths(normalizedPath)) {
+      registry.directories.add(parent)
+    }
     return filePath
   }
 
@@ -130,11 +167,27 @@ function uniqueArchiveFilePath(filePath: string, usedPaths: Set<string>): string
 
   for (let suffix = 2; ; suffix += 1) {
     const candidate = `${directory}${stem} (${suffix})${extension}`
-    if (!usedPaths.has(candidate.toLocaleLowerCase())) {
-      usedPaths.add(candidate.toLocaleLowerCase())
+    const normalizedCandidate = normalizeArchivePath(candidate)
+    if (
+      !registry.files.has(normalizedCandidate)
+      && !registry.directories.has(normalizedCandidate)
+      && !parentArchivePaths(normalizedCandidate).some(parent => registry.files.has(parent))
+    ) {
+      registry.files.add(normalizedCandidate)
+      for (const parent of parentArchivePaths(normalizedCandidate)) {
+        registry.directories.add(parent)
+      }
       return candidate
     }
   }
+}
+
+function sourceArchiveFileName(raw: string, fallback: string): string {
+  const segments = String(raw ?? '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(segment => segment && segment !== '.' && segment !== '..')
+  return segments.at(-1) || fallback
 }
 
 function makeBatches(items: KnowledgeFileItem[]): KnowledgeFileItem[][] {
@@ -169,7 +222,7 @@ async function copyInnerArchive(
   target: JSZip,
   innerBlob: Blob,
   prefix: string,
-  usedPaths: Set<string>,
+  paths: ArchivePathRegistry,
 ): Promise<number> {
   const inner = await JSZip.loadAsync(new Uint8Array(await innerBlob.arrayBuffer()))
   let copied = 0
@@ -179,7 +232,7 @@ async function copyInnerArchive(
     if (!archivePath) continue
     const data = await entry.async('uint8array')
     target.file(
-      uniqueArchiveFilePath(joinArchivePath(prefix, archivePath), usedPaths),
+      registerArchiveFilePath(joinArchivePath(prefix, archivePath), paths),
       data,
     )
     copied += 1
@@ -224,7 +277,10 @@ export async function exportWorkspaceKnowledgeBases(
     if (sourceItems.length === 0) continue
 
     const folder = uniqueKnowledgeBaseFolderName(kb.name, kb.id, usedFolderNames)
-    const usedPaths = new Set<string>()
+    const paths: ArchivePathRegistry = {
+      files: new Set<string>(),
+      directories: new Set<string>(),
+    }
 
     const addBatch = async (items: KnowledgeFileItem[]): Promise<void> => {
       throwIfAborted(options.signal)
@@ -235,7 +291,7 @@ export async function exportWorkspaceKnowledgeBases(
           options.signal,
         )
         throwIfAborted(options.signal)
-        exportedDocs += await copyInnerArchive(outer, innerBlob, folder, usedPaths)
+        exportedDocs += await copyInnerArchive(outer, innerBlob, folder, paths)
       } catch (error) {
         if (!isBatchSizeError(error)) throw error
         if (items.length > 1) {
@@ -248,14 +304,11 @@ export async function exportWorkspaceKnowledgeBases(
         const item = items[0]
         const fileBlob = await deps.downloadSingle(item.id, options.signal)
         throwIfAborted(options.signal)
-        const filename = sanitizeZipSegment(
-          resolveKnowledgeDownloadFileName(item),
-          `${item.id}.bin`,
-        )
+        const filename = sourceArchiveFileName(resolveKnowledgeDownloadFileName(item), `${item.id}.bin`)
         const folderPath = sanitizeInnerArchivePath(item.folder_path ?? '')
         const fileBytes = new Uint8Array(await fileBlob.arrayBuffer())
         outer.file(
-          uniqueArchiveFilePath(joinArchivePath(folder, folderPath, filename), usedPaths),
+          registerArchiveFilePath(joinArchivePath(folder, folderPath, filename), paths),
           fileBytes,
         )
         exportedDocs += 1
