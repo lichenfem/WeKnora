@@ -172,6 +172,72 @@ test('keeps duplicate filenames from separate batches instead of overwriting the
   assert.equal(await zip.file('A/docs/report (2).txt')?.async('string'), 'second')
 })
 
+test('preserves leading and trailing underscores in exported source filenames', async () => {
+  const result = await exportWorkspaceKnowledgeBases(
+    [{ id: 'kb-a', name: 'A' }],
+    createDeps({
+      filesByKb: {
+        'kb-a': [
+          { id: 'uploaded', type: 'file', file_path: 'uploaded', file_name: '_draft_.pdf' },
+          { id: 'manual', type: 'manual', title: '_会议记录_' },
+        ],
+      },
+      batch: async () => createZip({
+        '_draft_.pdf': 'uploaded',
+        '_会议记录_.md': 'manual',
+      }),
+    }),
+  )
+
+  const zip = await loadZip(result.blob)
+  assert.equal(await zip.file('A/_draft_.pdf')?.async('string'), 'uploaded')
+  assert.equal(await zip.file('A/_会议记录_.md')?.async('string'), 'manual')
+})
+
+test('rejects a file and directory path conflict across download batches', async () => {
+  await assert.rejects(
+    exportWorkspaceKnowledgeBases(
+      [{ id: 'kb-a', name: 'A' }],
+      createDeps({
+        filesByKb: {
+          'kb-a': [
+            { id: 'file-root', type: 'file', file_path: 'root', file_size: 512 * 1024 * 1024 },
+            { id: 'file-child', type: 'file', file_path: 'child', file_size: 1 },
+          ],
+        },
+        batch: async (_kbId, ids) => (
+          ids[0] === 'file-root'
+            ? createZip({ 'report.pdf': 'root' })
+            : createZip({ 'report.pdf/child.md': 'child' })
+        ),
+      }),
+    ),
+    (error: any) => error?.code === 'PATH_CONFLICT',
+  )
+})
+
+test('allows the same basename in different exported folders', async () => {
+  const result = await exportWorkspaceKnowledgeBases(
+    [{ id: 'kb-a', name: 'A' }],
+    createDeps({
+      filesByKb: {
+        'kb-a': [
+          { id: 'docs', type: 'file', file_path: 'docs', folder_path: 'docs' },
+          { id: 'images', type: 'file', file_path: 'images', folder_path: 'images' },
+        ],
+      },
+      batch: async () => createZip({
+        'docs/report.pdf': 'docs',
+        'images/report.pdf': 'images',
+      }),
+    }),
+  )
+
+  const zip = await loadZip(result.blob)
+  assert.equal(await zip.file('A/docs/report.pdf')?.async('string'), 'docs')
+  assert.equal(await zip.file('A/images/report.pdf')?.async('string'), 'images')
+})
+
 test('falls back to a single authenticated download for a file over the batch limit', async () => {
   const singles: string[] = []
   const result = await exportWorkspaceKnowledgeBases(
