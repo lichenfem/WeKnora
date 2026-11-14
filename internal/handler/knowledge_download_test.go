@@ -70,6 +70,89 @@ func (s *downloadShareStub) CheckTenantKBPermission(
 	return s.permission, true, nil
 }
 
+type preflightKBServiceStub struct {
+	interfaces.KnowledgeBaseService
+	kbs []*types.KnowledgeBase
+}
+
+func (s *preflightKBServiceStub) ListKnowledgeBases(context.Context) ([]*types.KnowledgeBase, error) {
+	return s.kbs, nil
+}
+
+type preflightKnowledgeServiceStub struct {
+	interfaces.KnowledgeService
+	itemsByKB map[string][]*types.Knowledge
+}
+
+func (s *preflightKnowledgeServiceStub) ListKnowledgeByKnowledgeBaseID(
+	_ context.Context,
+	kbID string,
+) ([]*types.Knowledge, error) {
+	return s.itemsByKB[kbID], nil
+}
+
+type workspaceExportPreflightResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		KnowledgeBaseCount int `json:"knowledge_base_count"`
+		FileCount          int `json:"file_count"`
+		ConflictCount      int `json:"conflict_count"`
+	} `json:"data"`
+	Error struct {
+		Message string `json:"message"`
+		Details struct {
+			Conflicts []struct {
+				Reason                          string `json:"reason"`
+				KnowledgeBaseID                 string `json:"knowledge_base_id"`
+				KnowledgeBaseName               string `json:"knowledge_base_name"`
+				FileKnowledgeID                 string `json:"file_knowledge_id"`
+				FileName                        string `json:"file_name"`
+				FolderPath                      string `json:"folder_path"`
+				ConflictPath                    string `json:"conflict_path"`
+				ConflictingDirectoryKnowledgeID string `json:"conflicting_directory_knowledge_id"`
+				ConflictingDirectoryFileName    string `json:"conflicting_directory_file_name"`
+				ConflictingDirectoryFolderPath  string `json:"conflicting_directory_folder_path"`
+			} `json:"conflicts"`
+			ConflictCount int  `json:"conflict_count"`
+			Truncated     bool `json:"truncated"`
+		} `json:"details"`
+	} `json:"error"`
+}
+
+func runWorkspaceExportPreflight(
+	t *testing.T,
+	kbs []*types.KnowledgeBase,
+	itemsByKB map[string][]*types.Knowledge,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(middleware.ErrorHandler(), func(c *gin.Context) {
+		ctx := types.WithCaller(c.Request.Context(), types.Caller{
+			TenantID: 7, UserID: "user-1", Role: types.TenantRoleContributor,
+		})
+		ctx = types.WithExecutionTenant(ctx, 7)
+		c.Request = c.Request.WithContext(ctx)
+		c.Set(types.TenantIDContextKey.String(), uint64(7))
+		c.Set(types.UserIDContextKey.String(), "user-1")
+		c.Next()
+	})
+	h := &KnowledgeHandler{
+		kbService: &preflightKBServiceStub{kbs: kbs},
+		kgService: &preflightKnowledgeServiceStub{itemsByKB: itemsByKB},
+	}
+	router.POST("/knowledge-bases/batch-export/preflight", h.PreflightWorkspaceExport)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/knowledge-bases/batch-export/preflight",
+		bytes.NewBufferString(`{}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
 func runBatchDownload(
 	t *testing.T,
 	svc *downloadKnowledgeStub,
@@ -390,4 +473,68 @@ func TestBatchDownloadKnowledgePreservesFolderPaths(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reader.File, 1)
 	require.Equal(t, "docs/spec/design.md", reader.File[0].Name)
+}
+
+func TestWorkspaceExportPreflightRejectsFileDirectoryConflict(t *testing.T) {
+	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
+	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
+		"kb-1": {
+			{ID: "file-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "report.pdf", FilePath: "stored-file"},
+			{ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "notes.md", FilePath: "stored-child", FolderPath: "report.pdf"},
+		},
+	})
+
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	var response workspaceExportPreflightResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.False(t, response.Success)
+	require.Len(t, response.Error.Details.Conflicts, 1)
+	conflict := response.Error.Details.Conflicts[0]
+	require.Equal(t, "file_directory_conflict", conflict.Reason)
+	require.Equal(t, "kb-1", conflict.KnowledgeBaseID)
+	require.Equal(t, "项目资料", conflict.KnowledgeBaseName)
+	require.Equal(t, "file-root", conflict.FileKnowledgeID)
+	require.Equal(t, "report.pdf", conflict.FileName)
+	require.Equal(t, "report.pdf", conflict.ConflictPath)
+	require.Equal(t, "file-child", conflict.ConflictingDirectoryKnowledgeID)
+	require.Equal(t, "report.pdf", conflict.ConflictingDirectoryFolderPath)
+}
+
+func TestWorkspaceExportPreflightAllowsSameBasenameInDifferentFolders(t *testing.T) {
+	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
+	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
+		"kb-1": {
+			{ID: "file-a", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "a.pdf", FilePath: "stored-a", FolderPath: "docs"},
+			{ID: "file-b", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "a.pdf", FilePath: "stored-b", FolderPath: "images"},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var response workspaceExportPreflightResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.Equal(t, 1, response.Data.KnowledgeBaseCount)
+	require.Equal(t, 2, response.Data.FileCount)
+	require.Zero(t, response.Data.ConflictCount)
+}
+
+func TestWorkspaceExportPreflightUsesNormalizedCaseInsensitivePaths(t *testing.T) {
+	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "资料", Type: "document"}}
+	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
+		"kb-1": {
+			{ID: "file-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "Résumé.txt", FilePath: "stored-file"},
+			{ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "child.md", FilePath: "stored-child", FolderPath: "re\u0301sume\u0301.TXT"},
+		},
+	})
+
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	var response workspaceExportPreflightResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response.Error.Details.Conflicts, 1)
 }

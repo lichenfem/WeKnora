@@ -342,6 +342,26 @@ func TestKnowledgeReadRoutesDeclareRetrieveCapability(t *testing.T) {
 	}
 }
 
+func TestWorkspaceExportPreflightRequiresFullAccessAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	g := &rbacGuards{}
+	v1 := gin.New().Group("/api/v1")
+	RegisterKnowledgeRoutes(v1, &handler.KnowledgeHandler{}, g)
+
+	policy := mustLookupAPIKeyPolicy(
+		t,
+		g,
+		http.MethodPost,
+		"/api/v1/knowledge-bases/batch-export/preflight",
+	)
+	if !policy.RequireFullAccess {
+		t.Fatal("workspace export preflight must require full-access API keys")
+	}
+	if len(policy.Capabilities) != 0 {
+		t.Fatalf("workspace export preflight capabilities = %#v, want full access only", policy.Capabilities)
+	}
+}
+
 func TestTenantInfrastructureRoutesDeclareSpecificCapabilities(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	g := &rbacGuards{}

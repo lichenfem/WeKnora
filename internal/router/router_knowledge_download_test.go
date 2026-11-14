@@ -151,3 +151,24 @@ func TestBatchKnowledgeDownloadRejectsReadOnlySharedKB(t *testing.T) {
 
 	require.Equal(t, http.StatusForbidden, rec.Code, "body=%s", rec.Body.String())
 }
+
+func TestWorkspaceExportPreflightRejectsTenantViewer(t *testing.T) {
+	engine := newKnowledgeDownloadRouteTestEngine(
+		t,
+		types.TenantRoleViewer,
+		&types.Knowledge{ID: "knowledge-own", KnowledgeBaseID: "kb-own", TenantID: 1},
+		&types.KnowledgeBase{ID: "kb-own", TenantID: 1},
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/knowledge-bases/batch-export/preflight",
+		bytes.NewBufferString(`{}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	engine.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusForbidden, rec.Code, "body=%s", rec.Body.String())
+}
