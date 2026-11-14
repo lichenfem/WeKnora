@@ -11,6 +11,14 @@
             <div class="header-actions" :class="{ 'header-actions-lite': authStore.isLiteMode }" style="--wails-draggable: no-drag">
               <ResourceListToolbar v-if="authStore.isLiteMode" hide-scopes v-model="spaceSelection" v-model:query="keyword" />
               <ResourceSortControl v-model="selectedResourceSort" />
+              <t-tooltip v-if="authStore.hasRole('contributor')" :content="$t('knowledgeList.bulkExport.action')" placement="bottom">
+                <t-button variant="text" theme="default" size="small" class="header-action-btn"
+                  data-testid="kb-list-bulk-export" :loading="bulkExporting"
+                  style="--wails-draggable: no-drag" @click="openBulkExport">
+                  <template #icon><t-icon name="download" size="16px" /></template>
+                  {{ $t('knowledgeList.bulkExport.action') }}
+                </t-button>
+              </t-tooltip>
               <t-tooltip v-if="authStore.hasRole('contributor')" :content="$t('knowledgeList.create')" placement="bottom">
                  <t-button variant="text" theme="default" size="small" class="header-action-btn"
                    data-guide="kb-list-create" style="--wails-draggable: no-drag" @click="handleCreateKnowledgeBase">
@@ -707,6 +715,9 @@
     </Teleport>
 
     <ContextualGuide tour="kbList" :when="showKbListContextualGuide" />
+    <KnowledgeBulkExportDialog v-model:visible="bulkExportVisible"
+      :exporting="bulkExporting" :progress="bulkExportProgress" :error="bulkExportError"
+      @start="handleBulkExport" @cancel="cancelBulkExport" />
   </div>
 </template>
 
@@ -718,7 +729,14 @@ import { MessagePlugin, Icon as TIcon } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import ResourceIcon from '@/components/icons/ResourceIcon.vue'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
-import { deleteKnowledgeBase, duplicateKnowledgeBase, togglePinKnowledgeBase } from '@/api/knowledge-base'
+import {
+  batchDownloadKnowledge,
+  deleteKnowledgeBase,
+  downKnowledgeDetails,
+  duplicateKnowledgeBase,
+  listKnowledgeFiles,
+  togglePinKnowledgeBase,
+} from '@/api/knowledge-base'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { formatStringDate } from '@/utils/index'
 import { useUIStore } from '@/stores/ui'
@@ -727,6 +745,14 @@ import { useOrganizationStore } from '@/stores/organization'
 import { listOrganizationSharedKnowledgeBases, type SharedKnowledgeBase, type OrganizationSharedKnowledgeBaseItem, type SourceFromAgentInfo } from '@/api/organization'
 import { mergeAllScopeKnowledgeBases, type OwnedKnowledgeBase, type SharedKnowledgeBaseLike } from './kbListMerge'
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue'
+import KnowledgeBulkExportDialog from './components/KnowledgeBulkExportDialog.vue'
+import {
+  WorkspaceBulkExportError,
+  exportWorkspaceKnowledgeBases,
+  type ExportProgress,
+  type KnowledgeFilePage,
+  type WorkspaceBulkExportDeps,
+} from './knowledgeBulkExport'
 import KbWikiBadge from './components/KbWikiBadge.vue'
 import KbTypeAvatar from './components/KbTypeAvatar.vue'
 import ResourceListToolbar from '@/components/ResourceListToolbar.vue'
@@ -757,6 +783,11 @@ const orgStore = useOrganizationStore()
 const chatResources = useChatResourcesStore()
 const { t } = useI18n()
 const selectedResourceSort = ref<ResourceSortValue>(DEFAULT_RESOURCE_SORT)
+const bulkExportVisible = ref(false)
+const bulkExporting = ref(false)
+const bulkExportProgress = ref<ExportProgress>()
+const bulkExportError = ref('')
+let bulkExportController: AbortController | undefined
 
 // 左侧空间选择：默认根据当前角色决定。
 // Viewer 在该空间里通常 0 KB owned，"我的"会显示空状态、又把共享 KB 藏起来，
@@ -1217,6 +1248,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  bulkExportController?.abort()
   window.removeEventListener('knowledgeFileUploaded', handleUploadFinishedEvent as EventListener)
 
   if (uploadRefreshTimer) {
@@ -1520,6 +1552,79 @@ const handleCreateKnowledgeBase = () => {
   const initialSection =
     modelsReadyLoaded.value && !isReadyForDocumentKb.value ? 'models' : undefined
   uiStore.openCreateKB('document', initialSection)
+}
+
+const openBulkExport = () => {
+  if (bulkExporting.value) return
+  bulkExportProgress.value = undefined
+  bulkExportError.value = ''
+  bulkExportVisible.value = true
+}
+
+const cancelBulkExport = () => {
+  bulkExportController?.abort()
+  bulkExportController = undefined
+  bulkExporting.value = false
+  bulkExportVisible.value = false
+}
+
+const downloadBulkExport = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+}
+
+const handleBulkExport = async () => {
+  if (bulkExporting.value) return
+  const controller = new AbortController()
+  bulkExportController = controller
+  bulkExporting.value = true
+  bulkExportError.value = ''
+  bulkExportProgress.value = undefined
+
+  try {
+    const knowledgeBases = await chatResources.fetchKnowledgeBasesForList({ creator: 'all' }, true)
+    const deps: WorkspaceBulkExportDeps = {
+      listFiles: async (kbId, params, options) => (
+        await listKnowledgeFiles(kbId, params, options)
+      ) as unknown as KnowledgeFilePage,
+      downloadBatch: (kbId, ids, signal) => batchDownloadKnowledge(kbId, ids, signal),
+      downloadSingle: (id, signal) => downKnowledgeDetails(id, signal),
+    }
+    const result = await exportWorkspaceKnowledgeBases(
+      knowledgeBases.map((kb: any) => ({ id: kb.id, name: kb.name, type: kb.type })),
+      deps,
+      {
+        signal: controller.signal,
+        onProgress: progress => {
+          bulkExportProgress.value = progress
+        },
+      },
+    )
+    if (controller.signal.aborted) return
+    downloadBulkExport(result.blob, result.fileName)
+    MessagePlugin.success(t('knowledgeList.bulkExport.completed'))
+    bulkExportVisible.value = false
+  } catch (error: any) {
+    if (controller.signal.aborted) return
+    if (error instanceof WorkspaceBulkExportError && error.code === 'NO_EXPORTABLE_FILES') {
+      bulkExportError.value = t('knowledgeList.bulkExport.noFiles')
+      MessagePlugin.warning(bulkExportError.value)
+    } else {
+      bulkExportError.value = error?.message || t('knowledgeList.bulkExport.failed')
+      MessagePlugin.error(bulkExportError.value)
+    }
+  } finally {
+    if (bulkExportController === controller) {
+      bulkExportController = undefined
+      bulkExporting.value = false
+    }
+  }
 }
 
 // 知识库编辑器成功回调（创建或编辑成功）

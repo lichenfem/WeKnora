@@ -24,6 +24,7 @@ export function fixture(
   const window = Object.assign(new EventTarget(), { innerHeight: 900, innerWidth: 1200, setTimeout, clearTimeout })
   const globals = {
     window, CustomEvent, setTimeout, clearTimeout, setInterval, clearInterval,
+    AbortController, DOMException,
     localStorage: storage, sessionStorage: storage,
     requestAnimationFrame: (callback: () => void) => setTimeout(callback, 16),
     document: { documentElement: { clientHeight: 900 }, querySelector: () => null },
