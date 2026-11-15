@@ -479,10 +479,14 @@ func TestWorkspaceExportPreflightRejectsFileDirectoryConflict(t *testing.T) {
 	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
 	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
 		"kb-1": {
-			{ID: "file-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "report.pdf", FilePath: "stored-file"},
-			{ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "notes.md", FilePath: "stored-child", FolderPath: "report.pdf"},
+			{
+				ID: "file-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "report.pdf", FilePath: "stored-file",
+			},
+			{
+				ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "notes.md", FilePath: "stored-child", FolderPath: "report.pdf",
+			},
 		},
 	})
 
@@ -506,10 +510,14 @@ func TestWorkspaceExportPreflightAllowsSameBasenameInDifferentFolders(t *testing
 	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
 	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
 		"kb-1": {
-			{ID: "file-a", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "a.pdf", FilePath: "stored-a", FolderPath: "docs"},
-			{ID: "file-b", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "a.pdf", FilePath: "stored-b", FolderPath: "images"},
+			{
+				ID: "file-a", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "a.pdf", FilePath: "stored-a", FolderPath: "docs",
+			},
+			{
+				ID: "file-b", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "a.pdf", FilePath: "stored-b", FolderPath: "images",
+			},
 		},
 	})
 
@@ -526,10 +534,14 @@ func TestWorkspaceExportPreflightCountsDuplicateSourcePaths(t *testing.T) {
 	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
 	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
 		"kb-1": {
-			{ID: "file-a", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "report.pdf", FilePath: "stored-a"},
-			{ID: "file-b", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "report.pdf", FilePath: "stored-b"},
+			{
+				ID: "file-a", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "report.pdf", FilePath: "stored-a",
+			},
+			{
+				ID: "file-b", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "report.pdf", FilePath: "stored-b",
+			},
 		},
 	})
 
@@ -545,10 +557,14 @@ func TestWorkspaceExportPreflightExcludesURLSnapshots(t *testing.T) {
 	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
 	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
 		"kb-1": {
-			{ID: "url-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "url",
-				FileName: "report.pdf", FilePath: "stored-url"},
-			{ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "notes.md", FilePath: "stored-child", FolderPath: "report.pdf"},
+			{
+				ID: "url-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "url",
+				FileName: "report.pdf", FilePath: "stored-url",
+			},
+			{
+				ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "notes.md", FilePath: "stored-child", FolderPath: "report.pdf",
+			},
 		},
 	})
 
@@ -564,10 +580,14 @@ func TestWorkspaceExportPreflightUsesNormalizedCaseInsensitivePaths(t *testing.T
 	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "资料", Type: "document"}}
 	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
 		"kb-1": {
-			{ID: "file-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "Résumé.txt", FilePath: "stored-file"},
-			{ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
-				FileName: "child.md", FilePath: "stored-child", FolderPath: "re\u0301sume\u0301.TXT"},
+			{
+				ID: "file-root", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "Résumé.txt", FilePath: "stored-file",
+			},
+			{
+				ID: "file-child", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "child.md", FilePath: "stored-child", FolderPath: "re\u0301sume\u0301.TXT",
+			},
 		},
 	})
 

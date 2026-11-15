@@ -199,7 +199,8 @@ func findWorkspaceExportConflicts(
 	conflicts := make([]WorkspaceExportPreflightConflict, 0)
 	for _, filePath := range filePaths {
 		fileEntry := files[filePath]
-		for ancestor := path.Dir(fileEntry.fullPath); ancestor != "." && ancestor != "/"; ancestor = path.Dir(ancestor) {
+		start := path.Dir(fileEntry.fullPath)
+		for ancestor := start; ancestor != "." && ancestor != "/"; ancestor = path.Dir(ancestor) {
 			ancestorKey := normalizeWorkspaceExportPath(ancestor)
 			ancestorFile, hasFile := files[ancestorKey]
 			directoryEntry, hasDirectory := directories[ancestorKey]
