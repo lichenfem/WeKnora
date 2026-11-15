@@ -1,6 +1,7 @@
 # Build extension and daemon from the same pinned source on the runtime architecture.
-FROM --platform=$TARGETPLATFORM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS browserskill
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS browserskill
 WORKDIR /build
+ENV CARGO_BUILD_JOBS=2
 # Use the same optional Debian mirror as the Go builder and runtime stages.
 ARG APK_MIRROR_ARG
 # This base image has no CA certificates. Install them from the original HTTP
@@ -10,7 +11,10 @@ RUN if [ -n "$APK_MIRROR_ARG" ]; then \
         apt-get update && \
         apt-get install -y --no-install-recommends ca-certificates && \
         rm -rf /var/lib/apt/lists/* && \
-        sed -i "s@deb.debian.org@${APK_MIRROR_ARG}@g" /etc/apt/sources.list.d/debian.sources; \
+        mirror=${APK_MIRROR_ARG#http://}; \
+        mirror=${mirror#https://}; \
+        mirror=${mirror%/}; \
+        sed -i -E "s@https?://deb\.debian\.org@https://${mirror}@g" /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends git python3 ca-certificates curl build-essential cmake pkg-config && \
@@ -24,9 +28,11 @@ ARG TARGETARCH
 RUN bash scripts/build_browserskill.sh /opt/weknora/browserskill "${TARGETOS}/${TARGETARCH}"
 
 # Build stage
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.26-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS builder
 
 WORKDIR /app
+ENV CARGO_BUILD_JOBS=2
+ARG TARGETARCH
 
 # 通过构建参数接收敏感信息
 ARG GOPRIVATE_ARG
@@ -41,7 +47,10 @@ ENV GOSUMDB=${GOSUMDB_ARG}
 
 # Install dependencies
 RUN if [ -n "$APK_MIRROR_ARG" ]; then \
-        sed -i "s@deb.debian.org@${APK_MIRROR_ARG}@g" /etc/apt/sources.list.d/debian.sources; \
+        mirror=${APK_MIRROR_ARG#http://}; \
+        mirror=${mirror#https://}; \
+        mirror=${mirror%/}; \
+        sed -i -E "s@https?://deb\.debian\.org@https://${mirror}@g" /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update && \
     apt-get install -y git build-essential libsqlite3-dev curl
@@ -81,8 +90,24 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     if [ "$WITH_ANYDOC" = "1" ]; then \
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --profile minimal --default-toolchain stable && \
+        CARGO_PROFILE_RELEASE_LTO=false \
+        CARGO_PROFILE_RELEASE_EMBED_BITCODE=false \
         ./scripts/build-anydoc-lib.sh; \
     fi
+
+RUN rm -rf /tmp/anydoc-strip && mkdir -p /tmp/anydoc-strip && cd /tmp/anydoc-strip && \
+    case "$TARGETARCH" in \
+        amd64) lib_dir=linux_amd64_gnu ;; \
+        arm64) lib_dir=linux_arm64_gnu ;; \
+        *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    archive="/app/third_party/anydoc-go/lib/$lib_dir/libanydoc_go.a" && \
+    test -f "$archive" && \
+    ar x "$archive" && \
+    for f in *.o; do \
+        objcopy --remove-section=.llvmbc --remove-section=.llvmcmd "$f"; \
+    done && \
+    rm "$archive" && ar rcs "$archive" *.o && ranlib "$archive"
 
 # Build the application with version info. Mount the Go build cache as well as
 # the module cache: `COPY . .` invalidates this layer on every source change,
@@ -102,7 +127,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod cp -r /go/pkg/mod/github.com/yanyiwu/ /app/yanyiwu/
 
 # Final stage
-FROM debian:12.12-slim
+FROM debian:12.12-slim@sha256:d5d3f9c23164ea16f31852f95bd5959aad1c5e854332fe00f7b3a20fcc9f635c
 
 WORKDIR /app
 
@@ -123,7 +148,10 @@ RUN apt-get update && \
 
 # Then switch to mirror if specified and install other packages
 RUN if [ -n "$APK_MIRROR_ARG" ]; then \
-        sed -i "s@deb.debian.org@${APK_MIRROR_ARG}@g" /etc/apt/sources.list.d/debian.sources; \
+        mirror=${APK_MIRROR_ARG#http://}; \
+        mirror=${mirror#https://}; \
+        mirror=${mirror%/}; \
+        sed -i -E "s@https?://deb\.debian\.org@https://${mirror}@g" /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends \

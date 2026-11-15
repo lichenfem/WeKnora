@@ -35,6 +35,8 @@ tmp/
 temp/
 *.log
 *.pid
+# 本地备份（数据库 dump + 构建日志，不应进构建上下文）
+backups/
 
 # 本地构建产物 / 二进制
 WeKnora
@@ -55,6 +57,7 @@ test/data/mswag.txt
 
 # 敏感文件
 .env
+.env 2
 .env.lite
 *.pem
 *.key
