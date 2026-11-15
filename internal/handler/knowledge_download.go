@@ -108,8 +108,8 @@ func (h *KnowledgeHandler) PreflightWorkspaceExport(c *gin.Context) {
 			return
 		}
 
-		files, directories := collectWorkspaceExportPaths(kb, items)
-		fileCount += len(files)
+		files, directories, sourceCount := collectWorkspaceExportPaths(kb, items)
+		fileCount += sourceCount
 		for _, conflict := range findWorkspaceExportConflicts(kb, files, directories) {
 			conflictCount++
 			if len(conflicts) < maxWorkspaceExportConflicts {
@@ -140,13 +140,15 @@ func (h *KnowledgeHandler) PreflightWorkspaceExport(c *gin.Context) {
 func collectWorkspaceExportPaths(
 	kb *types.KnowledgeBase,
 	items []*types.Knowledge,
-) (map[string]workspaceExportPathEntry, map[string]workspaceExportPathEntry) {
+) (map[string]workspaceExportPathEntry, map[string]workspaceExportPathEntry, int) {
 	files := make(map[string]workspaceExportPathEntry)
 	directories := make(map[string]workspaceExportPathEntry)
+	sourceCount := 0
 	for _, item := range items {
 		if !isWorkspaceExportSource(kb, item) {
 			continue
 		}
+		sourceCount++
 		filename := service.ResolveKnowledgeDownloadFilename(item)
 		safeName := sanitizeDownloadFileName(filename)
 		folderPath := sanitizeDownloadFolderPath(item.FolderPath)
@@ -170,7 +172,7 @@ func collectWorkspaceExportPaths(
 			}
 		}
 	}
-	return files, directories
+	return files, directories, sourceCount
 }
 
 func isWorkspaceExportSource(kb *types.KnowledgeBase, item *types.Knowledge) bool {

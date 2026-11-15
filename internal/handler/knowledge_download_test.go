@@ -522,6 +522,25 @@ func TestWorkspaceExportPreflightAllowsSameBasenameInDifferentFolders(t *testing
 	require.Zero(t, response.Data.ConflictCount)
 }
 
+func TestWorkspaceExportPreflightCountsDuplicateSourcePaths(t *testing.T) {
+	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
+	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
+		"kb-1": {
+			{ID: "file-a", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "report.pdf", FilePath: "stored-a"},
+			{ID: "file-b", KnowledgeBaseID: "kb-1", TenantID: 7, Type: "file",
+				FileName: "report.pdf", FilePath: "stored-b"},
+		},
+	})
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var response workspaceExportPreflightResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	require.Equal(t, 2, response.Data.FileCount)
+	require.Zero(t, response.Data.ConflictCount)
+}
+
 func TestWorkspaceExportPreflightExcludesURLSnapshots(t *testing.T) {
 	kbs := []*types.KnowledgeBase{{ID: "kb-1", TenantID: 7, Name: "项目资料", Type: "document"}}
 	w := runWorkspaceExportPreflight(t, kbs, map[string][]*types.Knowledge{
