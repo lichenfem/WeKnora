@@ -267,6 +267,30 @@ test('falls back to a single authenticated download for a file over the batch li
   assert.equal(await zip.file('A/notes/大文档.md')?.async('string'), 'manual source')
 })
 
+test('sanitizes fallback filenames while preserving legal edge underscores', async () => {
+  const result = await exportWorkspaceKnowledgeBases(
+    [{ id: 'kb-a', name: 'A' }],
+    createDeps({
+      filesByKb: {
+        'kb-a': [
+          { id: 'illegal', type: 'manual', title: 'report:Q1', file_size: 512 * 1024 * 1024 },
+          { id: 'reserved', type: 'manual', title: 'CON', file_size: 512 * 1024 * 1024 },
+          { id: 'underscored', type: 'manual', title: '_draft_', file_size: 512 * 1024 * 1024 },
+        ],
+      },
+      batch: async () => {
+        throw Object.assign(new Error('所选文件合计超过 512 MiB，请分批下载'), { status: 400 })
+      },
+      single: async () => new Blob(['source']),
+    }),
+  )
+
+  const zip = await loadZip(result.blob)
+  assert.equal(await zip.file('A/report_Q1.md')?.async('string'), 'source')
+  assert.equal(await zip.file('A/_CON.md')?.async('string'), 'source')
+  assert.equal(await zip.file('A/_draft_.md')?.async('string'), 'source')
+})
+
 test('does not produce an archive after abort or a knowledge base read failure', async () => {
   const controller = new AbortController()
   controller.abort()

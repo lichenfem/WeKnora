@@ -89,10 +89,14 @@ function uniqueKnowledgeBaseFolderName(
   return candidate
 }
 
-function sanitizeZipSegment(raw: string, fallback: string): string {
+function sanitizeZipSegment(
+  raw: string,
+  fallback: string,
+  preserveEdgeUnderscores = false,
+): string {
   let value = String(raw ?? '')
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
-    .replace(/^[.\s_]+|[.\s_]+$/g, '')
+    .replace(preserveEdgeUnderscores ? /^[.\s]+|[.\s]+$/g : /^[.\s_]+|[.\s_]+$/g, '')
   if (!value || value === '.' || value === '..') {
     value = fallback
   }
@@ -187,7 +191,7 @@ function sourceArchiveFileName(raw: string, fallback: string): string {
     .replace(/\\/g, '/')
     .split('/')
     .filter(segment => segment && segment !== '.' && segment !== '..')
-  return segments.at(-1) || fallback
+  return sanitizeZipSegment(segments.at(-1) || fallback, fallback, true)
 }
 
 function makeBatches(items: KnowledgeFileItem[]): KnowledgeFileItem[][] {
