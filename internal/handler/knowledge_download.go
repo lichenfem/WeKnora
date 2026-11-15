@@ -67,7 +67,7 @@ type workspaceExportPathEntry struct {
 // workspace before the browser starts downloading and zipping files. It is
 // read-only and does not create an archive.
 // @Summary 预检当前工作空间批量导出
-// @Description 检查当前工作空间内将被导出的源文件是否会形成文件/文件夹同名冲突。只检查当前工作空间，不包含跨工作空间共享知识库和 FAQ 知识库。
+// @Description 检查当前工作空间内将被导出的源文件是否会形成文件/文件夹同名冲突。只检查当前工作空间，不包含跨工作空间共享知识库、FAQ 知识库和 URL 快照。
 // @Tags 知识管理
 // @Accept json
 // @Produce json
