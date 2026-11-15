@@ -177,7 +177,7 @@ func isWorkspaceExportSource(kb *types.KnowledgeBase, item *types.Knowledge) boo
 	if item == nil || item.KnowledgeBaseID != kb.ID || item.TenantID != kb.TenantID {
 		return false
 	}
-	if item.Type == types.KnowledgeTypeFAQ {
+	if item.Type == types.KnowledgeTypeFAQ || item.Type == "url" {
 		return false
 	}
 	return item.IsManual() || item.FilePath != ""
